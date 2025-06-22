@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Calculadora de Precios V2</title>
+
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  
+  <!-- Animate.css -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/animate.css@4.1.1/animate.min.css" />
+
+  <!-- FontAwesome -->
+  <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
+
+  <style>
+    body {
+      padding: 30px;
+      min-height: 100vh;
+      background: linear-gradient(to right, #f2f2f2, #ffffff);
+    }
+
+    .calculator-card {
+      background: white;
+      border-radius: 1rem;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+      padding: 2rem;
+      margin-bottom: 2rem;
+    }
+
+    .result-box {
+      background-color: #f8f9fa;
+      border-radius: 1rem;
+      padding: 1rem;
+      text-align: center;
+    }
+
+    .table th, .table td {
+      vertical-align: middle;
+      text-align: center;
+    }
+
+    .export-buttons {
+      margin-top: 1rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: space-between;
+    }
+
+    /* 🌙 Modo Oscuro Automático */
+    @media (prefers-color-scheme: dark) {
+      body {
+        background: #121212;
+        color: #f1f1f1;
+      }
+
+      .calculator-card {
+        background: #1e1e1e;
+        color: #f1f1f1;
+        box-shadow: 0 10px 25px rgba(255, 255, 255, 0.05);
+      }
+
+      .form-control,
+      .form-check-label {
+        background: #2a2a2a;
+        color: #f1f1f1;
+        border-color: #444;
+      }
+
+      .form-control::placeholder {
+        color: #aaa;
+      }
+
+      .table {
+        color: #f1f1f1;
+        background-color: #1e1e1e;
+      }
+
+      .table thead {
+        background-color: #333;
+      }
+
+      .result-box {
+        background-color: #2a2a2a;
+        color: #f1f1f1;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <div class="calculator-card animate__animated animate__fadeInUp">
+      <h2 class="text-center mb-4">🧮 Calculadora de Precio con Margen</h2>
+
+      <div class="mb-3">
+        <label for="concepto" class="form-label">📝 Concepto / Producto</label>
+        <input type="text" class="form-control" id="concepto" placeholder="Ej. Mochila escolar" />
+      </div>
+
+      <div class="mb-3">
+        <label for="costo" class="form-label">💰 Costo Base</label>
+        <input type="number" class="form-control" id="costo" />
+      </div>
+
+      <div class="mb-3">
+        <label for="ganancia" class="form-label">📈 % Ganancia</label>
+        <input type="number" class="form-control" id="ganancia" />
+      </div>
+
+      <div class="mb-3">
+        <label for="descuento" class="form-label">🎁 % Descuento</label>
+        <input type="number" class="form-control" id="descuento" value="0" />
+      </div>
+
+      <div class="form-check mb-3">
+        <input class="form-check-input" type="checkbox" id="iva" />
+        <label class="form-check-label" for="iva">Agregar IVA del 16%</label>
+      </div>
+
+      <button class="btn btn-success w-100 mb-3" onclick="calcular()">✅ Calcular y Agregar</button>
+      <div class="text-end">
+        <input type="file" id="excelFile" accept=".xlsx" onchange="importarExcel()" class="form-control form-control-sm w-auto d-inline" />
+      </div>
+
+      <div class="result-box mt-4" id="resultado" style="display: none;">
+        <h4>💵 Precio Final Sugerido:</h4>
+        <p id="precioFinal" class="fs-3 fw-bold text-success">--</p>
+      </div>
+    </div>
+
+    <div class="calculator-card" id="tabla-container" style="display: none;">
+      <h4 class="text-center">📋 Productos Calculados</h4>
+
+      <div class="table-responsive">
+        <table class="table table-bordered" id="tablaProductos">
+          <thead class="table-dark">
+            <tr>
+              <th>#</th>
+              <th>Concepto</th>
+              <th>Costo</th>
+              <th>% Ganancia</th>
+              <th>% Desc.</th>
+              <th>IVA</th>
+              <th>Precio Sugerido</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="export-buttons">
+        <button class="btn btn-outline-danger" onclick="exportarPDF()">📄 Exportar PDF</button>
+        <button class="btn btn-outline-success" onclick="exportarExcel()">📊 Exportar Excel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Librerías -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+  <script>
+    let productos = JSON.parse(localStorage.getItem("productos")) || [];
+    let contador = productos.length ? productos[productos.length - 1].id + 1 : 1;
+
+    function calcular() {
+      const concepto = document.getElementById("concepto").value.trim();
+      const costo = parseFloat(document.getElementById("costo").value);
+      const ganancia = parseFloat(document.getElementById("ganancia").value);
+      const descuento = parseFloat(document.getElementById("descuento").value) || 0;
+      const aplicaIVA = document.getElementById("iva").checked;
+
+      if (!concepto || isNaN(costo) || isNaN(ganancia)) {
+        alert("Por favor, completa todos los campos obligatorios.");
+        return;
+      }
+
+      let precio = costo * (1 + ganancia / 100);
+      if (descuento > 0) precio *= (1 - descuento / 100);
+      if (aplicaIVA) precio *= 1.16;
+
+      const producto = {
+        id: contador++,
+        concepto,
+        costo,
+        ganancia,
+        descuento,
+        iva: aplicaIVA,
+        precio: parseFloat(precio.toFixed(2))
+      };
+
+      productos.push(producto);
+      guardarLocal();
+      renderTabla();
+      mostrarResultado(producto.precio);
+      limpiarFormulario();
+    }
+
+    function renderTabla() {
+      const tbody = document.querySelector("#tablaProductos tbody");
+      tbody.innerHTML = "";
+
+      productos.forEach((p, i) => {
+        const fila = document.createElement("tr");
+        fila.innerHTML = `
+          <td>${i + 1}</td>
+          <td>${p.concepto}</td>
+          <td>$${p.costo.toFixed(2)}</td>
+          <td>${p.ganancia}%</td>
+          <td>${p.descuento}%</td>
+          <td>${p.iva ? "✅" : "❌"}</td>
+          <td>$${p.precio.toFixed(2)}</td>
+          <td>
+            <button class="btn btn-sm btn-warning" onclick="editar(${p.id})">✏️</button>
+            <button class="btn btn-sm btn-danger" onclick="eliminar(${p.id})">🗑️</button>
+          </td>
+        `;
+        tbody.appendChild(fila);
+      });
+
+      document.getElementById("tabla-container").style.display = productos.length ? "block" : "none";
+    }
+
+    function mostrarResultado(precio) {
+      document.getElementById("precioFinal").textContent = `$${precio.toFixed(2)}`;
+      document.getElementById("resultado").style.display = "block";
+    }
+
+    function guardarLocal() {
+      localStorage.setItem("productos", JSON.stringify(productos));
+    }
+
+    function limpiarFormulario() {
+      document.getElementById("concepto").value = "";
+      document.getElementById("costo").value = "";
+      document.getElementById("ganancia").value = "";
+      document.getElementById("descuento").value = "0";
+      document.getElementById("iva").checked = false;
+    }
+
+    function eliminar(id) {
+      if (confirm("¿Eliminar este producto?")) {
+        productos = productos.filter(p => p.id !== id);
+        guardarLocal();
+        renderTabla();
+      }
+    }
+
+    function editar(id) {
+      const p = productos.find(p => p.id === id);
+      if (!p) return;
+      document.getElementById("concepto").value = p.concepto;
+      document.getElementById("costo").value = p.costo;
+      document.getElementById("ganancia").value = p.ganancia;
+      document.getElementById("descuento").value = p.descuento;
+      document.getElementById("iva").checked = p.iva;
+      productos = productos.filter(p => p.id !== id);
+      guardarLocal();
+      renderTabla();
+    }
+
+    function exportarPDF() {
+      const element = document.getElementById("tabla-container");
+      html2pdf().from(element).set({
+        margin: 0.5,
+        filename: 'productos_calculados.pdf',
+        html2canvas: { scale: 2 },
+        jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' }
+      }).save();
+    }
+
+    function exportarExcel() {
+      const tabla = document.getElementById("tablaProductos");
+      const wb = XLSX.utils.table_to_book(tabla, { sheet: "Productos" });
+      XLSX.writeFile(wb, "productos_calculados.xlsx");
+    }
+
+    function importarExcel() {
+      const file = document.getElementById("excelFile").files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: "array" });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet);
+
+        rows.forEach(row => {
+          if (row.Concepto && row.Costo && row["% Ganancia"]) {
+            productos.push({
+              id: contador++,
+              concepto: row.Concepto,
+              costo: parseFloat(row.Costo),
+              ganancia: parseFloat(row["% Ganancia"]),
+              descuento: parseFloat(row["% Desc."] || 0),
+              iva: row.IVA === "✅",
+              precio: parseFloat(row["Precio Sugerido"] || 0)
+            });
+          }
+        });
+
+        guardarLocal();
+        renderTabla();
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    renderTabla();
+  </script>
+
+</body>
+</html>
